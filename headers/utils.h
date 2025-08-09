@@ -14,8 +14,8 @@
 
 const int _DEFAULT_WIDTH = 1920;
 const int _DEFAULT_HEIGHT = 1080;
-const int _AA_SCALE = 2;
-const int _GROUP_SIZE = 32;
+const int _AA_SCALE = 4;
+const int _GROUP_SIZE = 16;
 
 
 extern unsigned int X_FBO;
