@@ -1,0 +1,429 @@
+#version 430 core
+#extension GL_ARB_gpu_shader_int64 : enable
+
+layout (local_size_x = 32, local_size_y = 32, local_size_Z = 1) in;
+
+layout(rgba32f, binding = 0) writeonly uniform image2D _TEXTURE;
+
+const int _PRECISION = 3;
+const int _ARRAY_SIZE = _PRECISION + 1;
+const uint _BASE_MASK = 0xFFFFFFFFU;
+
+uniform uint cntr_x[_ARRAY_SIZE];
+uniform uint cntr_y[_ARRAY_SIZE];
+uniform uint zoom[_ARRAY_SIZE];
+uniform float time;
+
+bool equals(uint x[_ARRAY_SIZE], uint y[_ARRAY_SIZE])
+{
+    for(int i = 0; i < _ARRAY_SIZE; i++)
+        if (x[i] != y[i]) return false;
+
+    return true;
+}
+
+bool eq2(in uint x[_ARRAY_SIZE], in uint y[_ARRAY_SIZE], in uint a[_ARRAY_SIZE], in uint b[_ARRAY_SIZE]) 
+{
+    return equals(x,y) && equals(a,b);
+}
+
+void assign(inout uint x[_ARRAY_SIZE], in uint y[_ARRAY_SIZE]) 
+{
+    for(int i = 0; i < _ARRAY_SIZE; i++)
+        x[i] = y[i];
+}
+
+void zero(inout uint x[_ARRAY_SIZE]) 
+{
+    for(int i = 0; i < _ARRAY_SIZE; i++)
+        x[i] = 0u;
+}
+
+void negate(inout uint x[_ARRAY_SIZE]) 
+{
+    x[0] = (x[0] == 0u ? 1u : 0u);
+}
+
+float get_float(uint x[_ARRAY_SIZE]) {
+    const float _HALF_BASE_F = 4294967296.0;
+    if (x[1] == 0u && x[2] == 0u) return 0.0;
+    
+    float result = float(x[1]);
+
+    for (int i = 2; i < _ARRAY_SIZE; i++) {
+        if (x[i] != 0u)
+            result += float(x[i]) / pow(_HALF_BASE_F, float(i - 1));
+    }
+
+    return (x[0] == 1u ? -result : result);
+}
+
+void load(inout uint x[_ARRAY_SIZE], in float v) 
+{
+    zero(x);
+    
+    if (v == 0.0) return;
+    
+    if (v < 0.0) 
+    {
+        x[0] = 1u; 
+        v = -v;
+    }
+    
+    uint bits = floatBitsToUint(v);
+    uint mantissa = bits & 0x7FFFFFu;
+    int exponent = int((bits >> 23) & 0xFFu) - 127;
+    
+    if (exponent > -127) 
+    {
+        mantissa |= 0x800000u;
+        mantissa <<= 8;
+    } 
+    else 
+    {
+        exponent = -126;
+        mantissa <<= 9;
+    }
+    
+    if (exponent >= 0) 
+    {
+        if (exponent < 32) 
+        {
+            x[1] = mantissa >> (31 - exponent);
+            
+            if (_PRECISION > 1) 
+            {
+                uint frac_shift = 31 - exponent;
+
+                if (frac_shift > 0)
+                    x[2] = mantissa << (32 - frac_shift);
+            }
+        }
+    } 
+    else 
+    {
+        int total_shift = -exponent - 1;
+        int array_index = 2 + (total_shift / 32);
+        int bit_shift = total_shift % 32;
+        
+        if (array_index < _ARRAY_SIZE) 
+        {
+            x[array_index] = mantissa >> bit_shift;
+
+            if (bit_shift > 0 && array_index + 1 < _ARRAY_SIZE)
+                x[array_index + 1] = mantissa << (32 - bit_shift);
+        }
+    }
+}
+
+void add(in const uint a[_ARRAY_SIZE], in const uint b[_ARRAY_SIZE], out uint r[_ARRAY_SIZE]) 
+{
+    uint sum[_ARRAY_SIZE];
+    bool pa = a[0] == 0u, pb = b[0] == 0u;
+    int i;
+    
+    if (pa == pb) 
+    {
+        uint64_t carry = 0UL;
+        for (i = _PRECISION; i > 0; i--)
+        {
+            uint64_t temp = uint64_t(a[i]) + uint64_t(b[i]) + carry;
+            sum[i] = uint(temp & _BASE_MASK);
+            carry = temp >> 32;
+        }
+        sum[0] = pa ? 0u : 1u;
+    } 
+    else
+    {
+        bool flip = false;
+        
+        for (i = 1; i < _ARRAY_SIZE; i++) 
+        {
+            if (a[i] != b[i])
+            {
+                flip = (a[i] < b[i]);
+                break;
+            }
+        }
+        
+        uint64_t borrow = 0UL;
+        if (flip) 
+        {
+            for (i = _PRECISION; i > 0; i--) 
+            {
+                uint64_t temp = uint64_t(b[i]) - uint64_t(a[i]) - borrow;
+                sum[i] = uint(temp & _BASE_MASK);
+                borrow = (temp >> 32) & 1UL;
+            }
+            sum[0] = pb ? 0u : 1u;
+        }
+        else
+        {
+            for (i = _PRECISION; i > 0; i--) 
+            {
+                uint64_t temp = uint64_t(a[i]) - uint64_t(b[i]) - borrow;
+                sum[i] = uint(temp & _BASE_MASK);
+                borrow = (temp >> 32) & 1UL;
+            }
+            sum[0] = pa ? 0u : 1u;
+        }
+    }
+
+    assign(r, sum);
+}
+
+void mul(in const uint a[_ARRAY_SIZE], in const uint b[_ARRAY_SIZE], out uint r[_ARRAY_SIZE])
+{
+    const uint64_t HALF_BASE = 0x80000000UL;
+
+    int i, j;
+    uint64_t carry;
+    uint64_t prod[2 * _PRECISION - 1];
+    uint buf[_ARRAY_SIZE];
+    zero(buf);
+    
+    for (i = 0; i < 2 * _PRECISION - 1; i++)
+        prod[i] = 0UL;
+    
+    for (i = 0; i < _PRECISION; i++)
+    {
+        carry = 0UL;
+        
+        for (j = 0; j < _PRECISION; j++)
+        {
+            uint64_t temp = uint64_t(a[_PRECISION - i]) * uint64_t(b[_PRECISION - j]);
+            prod[i + j] += temp + carry;
+            carry = prod[i + j] >> 32;
+            prod[i + j] &= _BASE_MASK;
+        }
+        
+        if (i + _PRECISION < 2 * _PRECISION - 1) 
+            prod[i + _PRECISION] += carry;
+    }
+    
+    if (_PRECISION > 1 && prod[_PRECISION-2] >= HALF_BASE)
+    {
+        carry = 1UL;
+        for (i = _PRECISION - 1; i < 2 * _PRECISION - 1 && carry > 0; i++) 
+        {
+            prod[i] += carry;
+            carry = prod[i] >> 32;
+            prod[i] &= _BASE_MASK;
+        }
+    }
+    
+    for (i = 0; i < _PRECISION; i++) 
+        buf[i + 1] = uint(prod[2 * _PRECISION - 2 - i]);
+    
+    if ((a[0] == 0u) != (b[0] == 0u)) 
+        buf[0] = 1u;
+    
+    assign(r, buf);
+}
+
+vec3 lch_to_lab(in vec3 lch) {
+    float H = radians(lch.z); 
+    return vec3(lch.x, lch.y * cos(H), lch.y * sin(H));
+}
+
+vec3 lab_to_xyz(in vec3 lab) {    
+    const float delta = 6.0 / 29.0;
+    const float kappa = 16.0 / 116.0;
+    const float gamma = 3.0 * delta * delta;
+    const vec3 white_point = vec3(95.047, 100.000, 108.883);
+
+    vec3 xyz = vec3(0.0);
+    xyz.y = (lab.x + 16.0) / 116.0;
+    xyz.x = lab.y / 500.0 + xyz.y;
+    xyz.z = xyz.y - lab.z / 200.0;
+    
+    xyz.x = (xyz.x > delta) ? xyz.x * xyz.x * xyz.x : (xyz.x - kappa) * gamma;
+    xyz.y = (xyz.y > delta) ? xyz.y * xyz.y * xyz.y : (xyz.y - kappa) * gamma;
+    xyz.z = (xyz.z > delta) ? xyz.z * xyz.z * xyz.z : (xyz.z - kappa) * gamma;
+    
+    return xyz * white_point;
+}
+
+vec3 xyz_to_rgb(in vec3 xyz) {
+    const float gamma = 1.0/2.4;
+    const mat3 xyz_to_srgb = mat3(
+         3.2404542, -0.9692660,  0.0556434,
+        -1.5371385,  1.8760108, -0.2040259,
+        -0.4985314,  0.0415560,  1.0572252
+    );
+    vec3 rgb = xyz_to_srgb * (xyz / 100.0);    
+    rgb.r = (rgb.r > 0.0031308) ? 1.055 * pow(rgb.r, gamma) - 0.055 : 12.92 * rgb.r;
+    rgb.g = (rgb.g > 0.0031308) ? 1.055 * pow(rgb.g, gamma) - 0.055 : 12.92 * rgb.g;
+    rgb.b = (rgb.b > 0.0031308) ? 1.055 * pow(rgb.b, gamma) - 0.055 : 12.92 * rgb.b;
+    
+    return clamp(rgb, 0, 1);
+}
+
+vec3 lch_to_rgb(in vec3 lch) {
+    return xyz_to_rgb(lab_to_xyz(lch_to_lab(lch)));
+}
+
+double modulate_value(in float val, in double center, in double amp, in float lambda, in float phi)
+{
+    const float PI = 3.1415926535897932;
+    return center + amp * (1.0 - 2.0 * pow(cos(lambda * PI * val + phi), 2));
+}
+
+dvec4 powers(double w, double base)
+{
+    double z = w * base;
+    double y = z * base;
+    double x = y * base;
+    return dvec4(x, y, z, w);
+}
+
+double sum3x4(dmat3x4 M)
+{
+    return dot(M[0] + M[1] + M[2], dvec4(1.0));
+}
+
+// maxChroma coefficients: [9.702326369635e+1, -5.427791914443e+0, 4.934291351884e-1, -1.683175969995e-2, 2.785696968978e-4, -2.401212748218e-6, 9.349095335732e-9, 9.330979491439e-12, -2.690798984821e-13, 1.263041250920e-15, -2.962812781334e-18, 3.605322405658e-21, -1.813325013936e-24] 
+// optimalLightness coefficients: [4.920239016011e+1, 1.821662153252e+0, -1.538390293938e-1, 4.953483048805e-3, -7.290098725984e-5, 5.088128613523e-7, -6.713261143117e-10, -1.642728894494e-11, 1.410021379498e-13, -5.662936815538e-16, 1.278419359880e-18, -1.561387983941e-21, 8.051690150421e-25]
+vec3 shade(float norm_iter) {
+//    double eased_iter = sqrt(double(norm_iter));
+//    double H = mod(mod(360 * eased_iter, 360) + 10 * time, 360);
+//    double L = modulate_value(float(eased_iter), 45, 10, 16.0, -time);
+//    double C = modulate_value(float(eased_iter), 60, 15, 4.0, 0.0);
+//    vec3 lch = vec3(L, C, H);
+//    return lch_to_rgb(lch);
+
+    dmat3x4 luma_mat = dmat3x4
+    (
+          82.389493542291561,   17.042424889104627, -488.417123932487900,
+         -79.904787738248274, 1054.278474936139000,  106.739448981119100,
+        -985.988643663301900,  -12.572172897240360,  372.315469438299400,
+         -30.710050038513106,  -73.403871314769532,   -8.990766879237924
+    );
+    double luma_const = 90.214510349008549;
+
+    dmat3x4 chroma_mat = dmat3x4
+    (
+        -171.6044077830663,   -38.890352990756519,  1132.3991701999590,
+         219.4936665969388, -2801.482206503167000,  -406.1442851515301,
+        3170.2303742675480,    200.70191294323020, -1602.8799036516950,
+         141.0587966606649,   324.276390964921100,  -103.4390555218805
+    );
+    double chroma_const = 54.778987609247743;
+
+    double eased_iter = sqrt(double(norm_iter));
+    double H = mod(mod(360 * eased_iter, 360) + 10 * time, 360);
+    double h_norm = (H - 180) / 127.4561202411492;
+    dmat3x4 power_mat = dmat3x4(0.0);
+    power_mat[2] = powers(h_norm, h_norm);
+    power_mat[1] = powers(power_mat[2].x * h_norm, h_norm);
+    power_mat[0] = powers(power_mat[1].x * h_norm, h_norm);
+
+    dmat3x4 luma_result = matrixCompMult(luma_mat, power_mat);
+    dmat3x4 chroma_result = matrixCompMult(chroma_mat, power_mat);
+    
+    
+    double L = sum3x4(luma_result) + luma_const;
+    L = modulate_value(norm_iter, float(L) - 15.0, 15.0, 16.0, 0.0);
+    double C = sum3x4(chroma_result) + chroma_const;
+    C = modulate_value(norm_iter, float(C) - 15.0, 15.0, 16.0, 0.0);
+    vec3 lch = vec3(L, C, H);
+    return lch_to_rgb(lch);
+}
+
+void main() {
+    const int MAX = 1000;
+    const int PERIOD_LENGTH = 100;
+    const int RADIUS = 10;
+    const uint ESCAPE_VALUE = uint(RADIUS * RADIUS);
+    const float ILOG2 = 1.0 / log(2.0);
+    const float SHIFTX = -0.625;
+    const float SHIFTY = -0.5;
+    const ivec2 TEXTURE_SIZE = imageSize(_TEXTURE);
+    const ivec2 G_ID = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 COMPUTE_SPACE = ivec2(gl_NumWorkGroups.x * gl_WorkGroupSize.x,
+                            gl_NumWorkGroups.y * gl_WorkGroupSize.y);
+
+    int iter;
+    bool period = false;
+    vec3 color = vec3(0.0);
+    uint c_r[_ARRAY_SIZE], c_i[_ARRAY_SIZE];
+    uint z_r[_ARRAY_SIZE], z_i[_ARRAY_SIZE];
+    uint nz_r[_ARRAY_SIZE], nz_i[_ARRAY_SIZE];
+    uint z_r2[_ARRAY_SIZE], z_i2[_ARRAY_SIZE];
+    uint p_r[_ARRAY_SIZE], p_i[_ARRAY_SIZE];
+    uint norm2[_ARRAY_SIZE];
+    zero(norm2);
+
+    if (G_ID.x >= TEXTURE_SIZE.x || G_ID.y >= TEXTURE_SIZE.y) {
+        imageStore(_TEXTURE, G_ID, vec4(color, 1));
+        return;
+    }
+
+//    // Convert Global Invocation ID To Complex Plane Coords
+//    load(c_r, G_ID.x);                // Load gid x coord
+//    load(c_i, G_ID.y);                // Load gid y coord
+//    load(z_r, 1.0 / COMPUTE_SPACE.x);  // Load reciprocal compute space width
+//    load(z_i, 1.0 / COMPUTE_SPACE.y);  // Load reciprocal compute space height
+//    mul(c_r, z_r, c_r);               // Calculate base texel x coordinate
+//    mul(c_i, z_i, c_i);               // Calculate base texel y coordinate
+//
+//    // Translate Center Of Mandelbrot Set to (0, 0)
+//    load(z_r, SHIFTX);                 // Load horizontal shift
+//    load(z_i, SHIFTY);                 // Load vertical shift
+//    add(c_r, z_r, c_r);                // Center horizontally
+//    add(c_i, z_i, c_i);                // Center vertically
+//
+//    // Scale View By Zoom
+//    mul(c_r, zoom, c_r);               // Multiply x by zoom
+//    mul(c_i, zoom, c_i);               // Multiply y by zoom
+//
+//    // Translate View To Camera Center
+//    add(c_r, cntr_x, c_r);             // Add center x coordinate
+//    add(c_i, cntr_y, c_i);             // Add center y coordinate
+//
+//    // Clear Temporary Values
+//    zero(z_r); zero(z_i); zero(z_r2); zero(z_i2);
+//
+//    // Calculate Escape Iteration
+//    for (iter = 0; iter < MAX && norm2[1] <= ESCAPE_VALUE; iter++)
+//    {
+//        if (mod(iter, PERIOD_LENGTH) == 0) {
+//            assign(p_r, z_r);
+//            assign(p_i, z_i);
+//        }
+//        // zy = (zx + zx) * zy + cy;
+//        add(z_r, z_r, nz_i);
+//        mul(nz_i, z_i, nz_i);
+//        add(nz_i, c_i, nz_i);
+//        assign(z_i, nz_i);
+//
+//        // x = zx2 - zy2 + cx;
+//        negate(z_i2);
+//        add(z_r2, z_i2, nz_r);
+//        add(nz_r, c_r, nz_r);
+//        assign(z_r, nz_r);
+//
+//        if (eq2(z_r, p_r, z_i, p_i))
+//        {
+//            period = true;
+//            break;
+//        }
+//
+//        // x2 = x * x
+//        mul(z_r, z_r, z_r2);
+//        // y2 = y * y
+//        mul(z_i, z_i, z_i2);
+//
+//        // norm2 = x2 + y2
+//        add(z_r2, z_i2, norm2);
+//    }
+//
+//    if (iter < MAX && !period) {
+//        float mu = iter + 1.0 - log(log(get_float(norm2)) * 0.5) * ILOG2;
+//        color = shade(mu / MAX);
+//
+//    }
+    
+    color = shade((0.5 * (G_ID.x + G_ID.y) * (G_ID.x + G_ID.y + 1) + G_ID.y) / (COMPUTE_SPACE.x * COMPUTE_SPACE.y));
+    imageStore(_TEXTURE, G_ID, vec4(color, 1));
+}
