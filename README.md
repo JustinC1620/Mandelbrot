@@ -14,3 +14,9 @@ Shift and control zoom in and out respectively.
 The default resolution and anti aliasing setting can be adjusted in utils.h
 
 ## Examples
+![Example 1](https://github.com/JustinC1620/Mandelbrot/blob/master/Examples/example_1.png)
+![Example 2](https://github.com/JustinC1620/Mandelbrot/blob/master/Examples/example_2.png)
+![Example 3](https://github.com/JustinC1620/Mandelbrot/blob/master/Examples/example_3.png)
+![Example 4](https://github.com/JustinC1620/Mandelbrot/blob/master/Examples/example_4.png)
+![Example 5](https://github.com/JustinC1620/Mandelbrot/blob/master/Examples/example_5.png)
+![Example 6](https://github.com/JustinC1620/Mandelbrot/blob/master/Examples/example_6.png)
