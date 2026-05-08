@@ -35,7 +35,7 @@ bool init(std::string w_name, GLFWwindow*& window);
 void resizeScreen(GLFWwindow* window, int width, int height);
 bool buildShader(Shader& shdr, const std::string path1, const std::string path2 = "");
 void processInput(GLFWwindow* window, Real32& zoom, Real32& cntr_x, Real32& cntr_y,
-                  bool& smooth_color, bool& precision, int& render_mode, float delta_time);
+                  bool& smooth_color, bool& precision, int& render_mode, float delta_time, bool& ok_lch);
 void renderTexture(unsigned int& vao, unsigned int& vbo);
 void queryWorkGroup(int max_cwg_count[3], int max_cwg_size[3], int& max_cwg_invo);
 void debug(GLFWwindow* window, int& num_frames, float& last_fps_time, const Real32& zoom);

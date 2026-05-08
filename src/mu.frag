@@ -6,6 +6,7 @@ in vec2 coord;
 uniform sampler2D mu_tex;
 uniform float time;
 uniform int render_mode;
+uniform bool ok_lch;
 
 vec3 polar_to_cartesian(in const vec3 polar) 
 {
@@ -176,7 +177,6 @@ vec3 shade(in const ivec2 p) {
     if (mu == 0) {return vec3(0.0);}
 
     const float shift = 15.0;
-    const bool ok_lch = false;
 
     const float l_shift = ok_lch ? shift * 0.01             : shift;
     const float c_shift = ok_lch ? shift * 0.00255172413793 : shift;

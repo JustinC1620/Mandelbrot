@@ -75,7 +75,7 @@ bool buildShader(Shader& shdr, const std::string path1, const std::string path2)
 // processInput()
 // Closes window upon 'esc' key press.
 void processInput(GLFWwindow* window, Real32& zoom, Real32& cntr_x, Real32& cntr_y,
-    bool& smooth_color, bool& precision, int& render_mode, float delta_time)
+    bool& smooth_color, bool& precision, int& render_mode, float delta_time, bool& ok_lch)
 {
     const Real32 _MOVE_SPEED(0.5);
     const float  _IN_SPEED = 2.0;
@@ -101,6 +101,7 @@ void processInput(GLFWwindow* window, Real32& zoom, Real32& cntr_x, Real32& cntr
 
     static int prev_s   = GLFW_RELEASE;
     static int prev_p   = GLFW_RELEASE;
+    static int prev_l   = GLFW_RELEASE;
     static int prev_1   = GLFW_RELEASE;
     static int prev_2   = GLFW_RELEASE;
     static int prev_3   = GLFW_RELEASE;
@@ -110,6 +111,7 @@ void processInput(GLFWwindow* window, Real32& zoom, Real32& cntr_x, Real32& cntr
 
     int cur_s   = glfwGetKey(window, GLFW_KEY_S);
     int cur_p   = glfwGetKey(window, GLFW_KEY_P);
+    int cur_l   = glfwGetKey(window, GLFW_KEY_L);
     int cur_1   = glfwGetKey(window, GLFW_KEY_1);
     int cur_2   = glfwGetKey(window, GLFW_KEY_2);
     int cur_3   = glfwGetKey(window, GLFW_KEY_3);
@@ -119,6 +121,7 @@ void processInput(GLFWwindow* window, Real32& zoom, Real32& cntr_x, Real32& cntr
 
     if (cur_s   == GLFW_PRESS && prev_s   == GLFW_RELEASE) smooth_color = !smooth_color;
     if (cur_p   == GLFW_PRESS && prev_p   == GLFW_RELEASE) precision    = !precision;
+    if (cur_l   == GLFW_PRESS && prev_l   == GLFW_RELEASE) ok_lch       = !ok_lch;
     if (cur_1   == GLFW_PRESS && prev_1   == GLFW_RELEASE) render_mode  = 0;  // shade
     if (cur_2   == GLFW_PRESS && prev_2   == GLFW_RELEASE) render_mode  = 1;  // sobel_mu
     if (cur_3   == GLFW_PRESS && prev_3   == GLFW_RELEASE) render_mode  = 2;  // laplace_mu
@@ -128,6 +131,7 @@ void processInput(GLFWwindow* window, Real32& zoom, Real32& cntr_x, Real32& cntr
 
     prev_s   = cur_s;
     prev_p   = cur_p;
+    prev_l   = cur_l;
     prev_1   = cur_1;
     prev_2   = cur_2;
     prev_3   = cur_3;

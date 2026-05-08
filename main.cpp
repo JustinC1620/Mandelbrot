@@ -7,13 +7,14 @@ int main(void)
     Shader on_shdr, post_shdr, mu_shdr, float_shdr, arb_shdr;
     float last_time = static_cast<float>(glfwGetTime());
     float last_fps_time = static_cast<float>(glfwGetTime());
-    float delta_time = 0.0;
-    int num_frames = 0;
     unsigned int vao = 0, vbo = 0;
     Real32 zoom(3), cntr_x(-0.5), cntr_y(0.0);
+    float delta_time  = 0.0;
+    int num_frames    = 0;
+    int render_mode   = 0;
     bool smooth_color = false;
-    bool precision = false;
-    int render_mode = 0;
+    bool precision    = false;
+    bool ok_lch       = false;
 
     if (!init(_WINDOW_NAME, window)) { return -1; }
 
@@ -84,7 +85,7 @@ int main(void)
         last_time = current_time;
 
         glfwPollEvents();
-        processInput(window, zoom, cntr_x, cntr_y, smooth_color, precision, render_mode, delta_time);
+        processInput(window, zoom, cntr_x, cntr_y, smooth_color, precision, render_mode, delta_time, ok_lch);
 
         if (precision) {
             arb_shdr.use();
@@ -92,7 +93,6 @@ int main(void)
             arb_shdr.setUIntArr("cntr_y", cntr_y.getReal(), cntr_y.getSize());
             arb_shdr.setUIntArr("zoom", zoom.getReal(), zoom.getSize());
             arb_shdr.setBool("smooth_color", smooth_color);
-
         }
         else {
             float_shdr.use();
@@ -114,6 +114,7 @@ int main(void)
         mu_shdr.setInt("mu_tex", 0);
         mu_shdr.setFloat("time", static_cast<float>(glfwGetTime()));
         mu_shdr.setInt("render_mode", render_mode);
+        mu_shdr.setBool("ok_lch", ok_lch);
         renderTexture(vao, vbo);
         glMemoryBarrier(GL_FRAMEBUFFER_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
 
