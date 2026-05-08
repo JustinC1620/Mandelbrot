@@ -20,26 +20,26 @@
 class Shader {
 public:
     // Constructors
-    Shader();                                                          // Default constructor
-    Shader(const std::string vert_path, const std::string frag_path);  // Vertex & fragment shader constructor
-    Shader(const std::string comp_path);                               // Compute shader constructor
+    Shader();                                                              // Default constructor
+    Shader(const std::string vert_path, const std::string frag_path);      // Vertex & fragment shader constructor
+    Shader(const std::string comp_path);                                   // Compute shader constructor
     // Getters
-    unsigned int getId() const;                                        // Get shader id
+    unsigned int getId() const;                                            // Get shader id
 
     // Public Functions
-    void setBool(const std::string& name, bool val) const;             // Sets bool uniform
-    void setInt(const std::string& name, int val) const;               // Sets int uniform
+    void setBool(const std::string& name, bool val) const;                 // Sets bool uniform
+    void setInt(const std::string& name, int val) const;                   // Sets int uniform
     void setUIntArr(const std::string& name, GLuint* val, int len) const;  // Sets unsigned int uniform array
-    void setFloat(const std::string& name, float val) const;           // Sets float uniform
+    void setFloat(const std::string& name, float val) const;               // Sets float uniform
     void setFloatArr(const std::string& name, float* val, int len) const;  // Sets float uniform array
-    void use();                                                        // Activates shader
+    void use();                                                            // Activates shader
 
 private:
     // Private Constants
-    static const int _BUFF_SIZE = 512;                                 // Size of buffer for errors
+    static const int _BUFF_SIZE = 512;                                     // Size of buffer for errors
 
     // Private Variables
-    unsigned int _id;                                                  // Shader id
+    unsigned int _id;                                                      // Shader id
 
     // Private Functions
     static void compileShader(std::string f_name, int type, unsigned int& id);

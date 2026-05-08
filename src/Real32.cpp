@@ -153,24 +153,19 @@ void Real32::add(const Real32& real_a, const Real32& real_b, Real32& real_r)
 
     Real32 temp = Real32();
     uint32_t* add_buffer = temp.real;
-    uint32_t* r = real_r.real;
 
     bool add_pa = a[0] == 0u;
     bool add_pb = b[0] == 0u;
 
     if (add_pa == add_pb)
     {
-        uint32_t add_carry = 0u;
+        uint64_t add_carry = 0ULL;
 
         for (int add_i = PRECISION; add_i > 0; add_i--)
         {
-            uint32_t add_next = 0u;
-
-            if (a[add_i] + b[add_i] < a[add_i])
-                add_next = 1u;
-
-            add_buffer[add_i] = a[add_i] + b[add_i] + add_carry;
-            add_carry = add_next;
+            uint64_t add_temp = uint64_t(a[add_i]) + uint64_t(b[add_i]) + add_carry;
+            add_buffer[add_i] = uint32_t(add_temp & 0xFFFFFFFFULL);
+            add_carry = add_temp >> 32;
         }
         add_buffer[0] = add_pa ? 0u : 1u;
     }
@@ -180,46 +175,33 @@ void Real32::add(const Real32& real_a, const Real32& real_b, Real32& real_r)
 
         for (int add_i = 1; add_i < ARRAY_SIZE; add_i++)
         {
-            if (b[add_i] > a[add_i])
+            if (a[add_i] != b[add_i])
             {
-                add_flip = true;
+                add_flip = (a[add_i] < b[add_i]);
                 break;
             }
-            if (a[add_i] > b[add_i])
-                break;
         }
+
+        uint64_t add_borrow = 0ULL;
         if (add_flip)
         {
-            uint32_t add_borrow = 0u;
-
             for (int add_i = PRECISION; add_i > 0; add_i--)
             {
-                add_buffer[add_i] = b[add_i] - a[add_i] - add_borrow;
-                add_borrow = b[add_i] < a[add_i] + add_borrow ? add_borrow = 1u : add_borrow = 0u;
-                if (b[add_i] < a[add_i] + add_borrow)
-                    add_borrow = 1u;
-                else
-                    add_borrow = 0u;
+                uint64_t add_temp = uint64_t(b[add_i]) - uint64_t(a[add_i]) - add_borrow;
+                add_buffer[add_i] = uint32_t(add_temp & 0xFFFFFFFFULL);
+                add_borrow = (add_temp >> 32) & 1ULL;
             }
+            add_buffer[0] = add_pb ? 0u : 1u;
         }
-        else {
-            uint32_t add_borrow = 0u;
-
-            for (int add_i = PRECISION; add_i > 0; add_i--) 
+        else
+        {
+            for (int add_i = PRECISION; add_i > 0; add_i--)
             {
-                add_buffer[add_i] = a[add_i] - b[add_i] - add_borrow;
-                if (a[add_i] < b[add_i] || a[add_i] < b[add_i] + add_borrow)
-                    add_borrow = 1u;
-                else
-                    add_borrow = 0u;
+                uint64_t add_temp = uint64_t(a[add_i]) - uint64_t(b[add_i]) - add_borrow;
+                add_buffer[add_i] = uint32_t(add_temp & 0xFFFFFFFFULL);
+                add_borrow = (add_temp >> 32) & 1ULL;
             }
-        }
-        add_buffer[0] = add_pa == add_flip ? 0u : 1u;
-        if (add_pa == add_flip) {
-            add_buffer[0] = 1u;
-        }
-        else {
-            add_buffer[0] = 0u;
+            add_buffer[0] = add_pa ? 0u : 1u;
         }
     }
     assign(real_r, temp);
@@ -232,71 +214,43 @@ void Real32::mul(const Real32& real_a, const Real32& real_b, Real32& real_r)
 
     Real32 temp = Real32();
     uint32_t* mul_buffer = temp.real;
-    uint32_t* r = real_r.real;
 
-    uint32_t mul_product[2 * PRECISION - 1];
+    uint64_t mul_product[2 * PRECISION - 1];
 
     for (int mul_i = 0; mul_i < 2 * PRECISION - 1; mul_i++)
-        mul_product[mul_i] = 0u;
+        mul_product[mul_i] = 0ULL;
 
-    for (int mul_i = 0; mul_i < PRECISION; mul_i++) {
-        uint32_t mul_carry = 0u;
+    for (int mul_i = 0; mul_i < PRECISION; mul_i++)
+    {
+        uint64_t mul_carry = 0ULL;
 
-        for (int mul_j = 0; mul_j < PRECISION; mul_j++) {
-            uint32_t mul_next = 0;
-            uint32_t mul_value = a[PRECISION - mul_i] * b[PRECISION - mul_j];
-
-            if (mul_product[mul_i + mul_j] + mul_value < mul_product[mul_i + mul_j])
-                mul_next++;
-
-            mul_product[mul_i + mul_j] += mul_value;
-
-            if (mul_product[mul_i + mul_j] + mul_carry < mul_product[mul_i + mul_j])
-                mul_next++;
-
-            mul_product[mul_i + mul_j] += mul_carry;
-            uint32_t mul_lower_a = a[PRECISION - mul_i] & 0xFFFF;
-            uint32_t mul_upper_a = a[PRECISION - mul_i] >> 16;
-            uint32_t mul_lower_b = b[PRECISION - mul_j] & 0xFFFF;
-            uint32_t mul_upper_b = b[PRECISION - mul_j] >> 16;
-            uint32_t mul_lower = mul_lower_a * mul_lower_b;
-            uint32_t mul_upper = mul_upper_a * mul_upper_b;
-            uint32_t mul_mid = mul_lower_a * mul_upper_b;
-            mul_upper += mul_mid >> 16; mul_mid = mul_mid << 16;
-
-            if (mul_lower + mul_mid < mul_lower)
-                mul_upper++;
-
-            mul_lower += mul_mid;
-            mul_mid = mul_lower_b * mul_upper_a;
-            mul_upper += mul_mid >> 16;
-            mul_mid = mul_mid << 16;
-
-            if (mul_lower + mul_mid < mul_lower)
-                mul_upper++;
-
-            mul_carry = mul_upper + mul_next;
+        for (int mul_j = 0; mul_j < PRECISION; mul_j++)
+        {
+            uint64_t mul_temp = uint64_t(a[PRECISION - mul_i]) * uint64_t(b[PRECISION - mul_j]);
+            mul_product[mul_i + mul_j] += mul_temp + mul_carry;
+            mul_carry = mul_product[mul_i + mul_j] >> 32;
+            mul_product[mul_i + mul_j] &= 0xFFFFFFFFULL;
         }
+
         if (mul_i + PRECISION < 2 * PRECISION - 1)
             mul_product[mul_i + PRECISION] += mul_carry;
     }
-    if (PRECISION > 1 && mul_product[PRECISION - 2] >= HALF_BASE) {
 
-        for (int mul_i = PRECISION - 1; mul_i < 2 * PRECISION - 1; mul_i++) {
-
-            if (mul_product[mul_i] + 1 > mul_product[mul_i]) {
-                mul_product[mul_i]++;
-                break;
-            }
-            mul_product[mul_i]++;
+    if (PRECISION > 1 && mul_product[PRECISION - 2] >= HALF_BASE)
+    {
+        uint64_t mul_carry = 1ULL;
+        for (int mul_i = PRECISION - 1; mul_i < 2 * PRECISION - 1 && mul_carry > 0; mul_i++)
+        {
+            mul_product[mul_i] += mul_carry;
+            mul_carry = mul_product[mul_i] >> 32;
+            mul_product[mul_i] &= 0xFFFFFFFFULL;
         }
     }
 
     for (int mul_i = 0; mul_i < PRECISION; mul_i++)
-        mul_buffer[mul_i + 1] = mul_product[2 * PRECISION - 2 - mul_i];
+        mul_buffer[mul_i + 1] = uint32_t(mul_product[2 * PRECISION - 2 - mul_i]);
 
-    if ((a[0] == 0u) != (b[0] == 0u))
-        mul_buffer[0] = 1u;
+    mul_buffer[0] = ((a[0] == 0u) != (b[0] == 0u)) ? 1u : 0u;
 
     assign(real_r, temp);
 }

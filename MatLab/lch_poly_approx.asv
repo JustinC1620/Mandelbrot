@@ -5,7 +5,7 @@
 % Set SPACE to 'lch' or 'oklch' before running.
 
 SPACE = 'oklch';
-STEPS = 2 * 360;
+STEPS = 720;
 POLY_DEG = 12;
 
 % -------------------------------------------------------------------------
@@ -24,7 +24,7 @@ fprintf("Started luma/chroma optimization...\n");
 tic;
 optimized_approx = zeros(STEPS, 3);
 parfor i = 1 : STEPS
-    optimized_approx(i, :) = optimize_luma_chroma(rough_approx(i, :), SPACE, [0.5, 0.5]);
+    optimized_approx(i, :) = optimize_luma_chroma(rough_approx(i, :), SPACE, [0.0, 0.5]);
 end
 fprintf("Finished in %.2f s\n", toc);
 

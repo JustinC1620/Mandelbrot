@@ -1,0 +1,68 @@
+#version 430 core
+
+layout (local_size_x = 16, local_size_y = 16, local_size_Z = 1) in;
+
+layout(r32f, binding = 0) writeonly uniform image2D _TEXTURE;
+
+uniform float cntr_x;
+uniform float cntr_y;
+uniform float zoom;
+uniform bool smooth_color;
+
+void main() {
+    const ivec2 G_ID = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 TEXTURE_SIZE = imageSize(_TEXTURE);
+    if (G_ID.x >= TEXTURE_SIZE.x || G_ID.y >= TEXTURE_SIZE.y) {
+        return;
+    }
+
+    const int MAX = 1000;
+    const int PERIOD_LENGTH = 100;
+    const uint RADIUS = 10;
+    const float ESCAPE_VALUE = float(RADIUS) * RADIUS;
+    const ivec2 COMPUTE_SPACE = ivec2(gl_NumWorkGroups.x * gl_WorkGroupSize.x,
+                                      gl_NumWorkGroups.y * gl_WorkGroupSize.y);
+     
+    const float NORM_X = (float(G_ID.x) / float(TEXTURE_SIZE.x)) - 0.5;
+    const float NORM_Y = (float(G_ID.y) / float(TEXTURE_SIZE.y)) - 0.5;
+    const float ASPECT = float(TEXTURE_SIZE.x) / float(TEXTURE_SIZE.y);
+
+    float c_r = NORM_X * zoom * ASPECT + cntr_x;
+    float c_i = NORM_Y * zoom + cntr_y;
+
+    float z_r   = 0.0, z_i  = 0.0;
+    float z_r2  = 0.0, z_i2 = 0.0;
+    float nz_r  = 0.0, nz_i = 0.0; 
+    float p_r   = 0.0, p_i  = 0.0;
+    float norm2 = 0.0;
+  
+    int   iter   = 0;
+    int   period = 0;
+    float mu     = 0.0;
+    // Calculate Escape Iteration
+    for (iter; iter < MAX && norm2 < ESCAPE_VALUE; iter++)
+    {
+        if (iter == 0 || iter - period >= PERIOD_LENGTH) {
+            p_r    = z_r;
+            p_i    = z_i;
+            period = iter;
+        }
+        
+        z_i = 2 * z_r * z_i + c_i;
+
+        z_r = z_r2 - z_i2 + c_r;
+
+        z_r2 = z_r * z_r;
+        
+        z_i2 = z_i * z_i;
+
+        norm2 = z_r2 + z_i2;
+
+        iter = (z_r == p_r) && (z_i == p_i) ? MAX : iter;
+    }
+    if (iter < MAX) {
+        mu = smooth_color ? iter + 1.0 - log(log(norm2) * 0.5) / log(2) : iter;
+        mu = mu / float(MAX);
+    }
+    imageStore(_TEXTURE, G_ID, vec4(vec3(mu), 1.0));
+}

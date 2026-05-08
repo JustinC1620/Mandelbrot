@@ -50,11 +50,13 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="src\off.vert" />
-    <None Include="src\off.frag">
+    <None Include="src\mu.frag">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="src\cs.comp" />
+    <None Include="src\arb.comp" />
     <None Include="src\on.vert" />
     <None Include="src\on.frag" />
+    <None Include="src\post.frag" />
+    <None Include="src\float.comp" />
   </ItemGroup>
 </Project>
