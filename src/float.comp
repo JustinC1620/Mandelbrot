@@ -1,8 +1,8 @@
-#version 430 core
+#version 460 core
 
 layout (local_size_x = 16, local_size_y = 16, local_size_Z = 1) in;
 
-layout(r32f, binding = 0) writeonly uniform image2D _TEXTURE;
+layout(rg32f, binding = 0) writeonly uniform image2D _TEXTURE;
 
 uniform float cntr_x;
 uniform float cntr_y;
@@ -18,8 +18,8 @@ void main() {
 
     const int MAX = 1000;
     const int PERIOD_LENGTH = 100;
-    const uint RADIUS = 10;
-    const float ESCAPE_VALUE = float(RADIUS) * RADIUS;
+    const float RADIUS = 10.0;
+    const float ESCAPE_VALUE = RADIUS * RADIUS;
     const ivec2 COMPUTE_SPACE = ivec2(gl_NumWorkGroups.x * gl_WorkGroupSize.x,
                                       gl_NumWorkGroups.y * gl_WorkGroupSize.y);
      
@@ -27,19 +27,23 @@ void main() {
     const float NORM_Y = (float(G_ID.y) / float(TEXTURE_SIZE.y)) - 0.5;
     const float ASPECT = float(TEXTURE_SIZE.x) / float(TEXTURE_SIZE.y);
 
-    float c_r = NORM_X * zoom * ASPECT + cntr_x;
-    float c_i = NORM_Y * zoom + cntr_y;
+    const float c_r = NORM_X * zoom * ASPECT + cntr_x;
+    const float c_i = NORM_Y * zoom + cntr_y;
 
-    float z_r   = 0.0, z_i  = 0.0;
-    float z_r2  = 0.0, z_i2 = 0.0;
-    float nz_r  = 0.0, nz_i = 0.0; 
-    float p_r   = 0.0, p_i  = 0.0;
+    float z_r   = 0.0, z_i   = 0.0;
+    float z_r2  = 0.0, z_i2  = 0.0;
+    float nz_r  = 0.0, nz_i  = 0.0; 
+    float p_r   = 0.0, p_i   = 0.0;
+    float dz_r  = 1.0, dz_i  = 0.0;
+    float ndz_r = 0.0, ndz_i = 0.0;
     float norm2 = 0.0;
+
   
     int   iter   = 0;
     int   period = 0;
     float mu     = 0.0;
-    // Calculate Escape Iteration
+    float dist   = 0.0;
+
     for (iter; iter < MAX && norm2 < ESCAPE_VALUE; iter++)
     {
         if (iter == 0 || iter - period >= PERIOD_LENGTH) {
@@ -47,22 +51,27 @@ void main() {
             p_i    = z_i;
             period = iter;
         }
+
+        ndz_r = 2.0 * (z_r * dz_r - z_i * dz_i) + 1.0;
+        ndz_i = 2.0 * (z_r * dz_i + z_i * dz_r);
+        dz_r = ndz_r;
+        dz_i = ndz_i;
         
         z_i = 2 * z_r * z_i + c_i;
-
         z_r = z_r2 - z_i2 + c_r;
-
         z_r2 = z_r * z_r;
-        
         z_i2 = z_i * z_i;
-
         norm2 = z_r2 + z_i2;
 
         iter = (z_r == p_r) && (z_i == p_i) ? MAX : iter;
     }
     if (iter < MAX) {
-        mu = smooth_color ? iter + 1.0 - log(log(norm2) * 0.5) / log(2) : iter;
+        const float z_norm  = sqrt(norm2);
+        mu = smooth_color ? iter + 1.0 - log(log(z_norm)) / log(2) : iter;
         mu = mu / float(MAX);
+
+        const float dz_norm = sqrt(dz_r * dz_r + dz_i * dz_i);
+        dist = z_norm * log(z_norm) * float(TEXTURE_SIZE.x) / (dz_norm * zoom);
     }
-    imageStore(_TEXTURE, G_ID, vec4(vec3(mu), 1.0));
+    imageStore(_TEXTURE, G_ID, vec4(mu, dist, 0.0, 1.0));
 }

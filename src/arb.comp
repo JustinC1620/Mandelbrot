@@ -211,6 +211,17 @@ void mul(in const uint a[_ARRAY_SIZE], in const uint b[_ARRAY_SIZE], out uint r[
     r[0] = ((a[0] == 0u) != (b[0] == 0u)) ? 1u : 0u;
 }
 
+void shr(inout uint x[_ARRAY_SIZE], int bits)
+{
+    uint carry = 0u;
+
+    for (int i = 1; i < _ARRAY_SIZE; i++)
+    {
+        uint nextCarry = x[i] << (32 - bits);
+        x[i] = (x[i] >> bits) | carry;
+        carry = nextCarry;
+    }
+}
 
 void main() {
     const ivec2 G_ID = ivec2(gl_GlobalInvocationID.xy);
@@ -244,15 +255,21 @@ void main() {
     add(c_r, cntr_x, c_r);             // Add center x coordinate
     add(c_i, cntr_y, c_i);             // Add center y coordinate
 
-    uint z_r[_ARRAY_SIZE],  z_i[_ARRAY_SIZE];  zero(z_r);  zero(z_i);
-    uint z_r2[_ARRAY_SIZE], z_i2[_ARRAY_SIZE]; zero(z_r2); zero(z_i2);
+    uint z_r[_ARRAY_SIZE],  z_i[_ARRAY_SIZE];   zero(z_r);       zero(z_i);
+    uint z_r2[_ARRAY_SIZE], z_i2[_ARRAY_SIZE];  zero(z_r2);      zero(z_i2);
     uint nz_r[_ARRAY_SIZE], nz_i[_ARRAY_SIZE]; 
     uint p_r[_ARRAY_SIZE],  p_i[_ARRAY_SIZE];
-    uint norm2[_ARRAY_SIZE];                   zero(norm2);
+    uint dz_r[_ARRAY_SIZE], dz_i[_ARRAY_SIZE];  load(dz_r, 1.0); zero(dz_i);
+    uint ndz_r[_ARRAY_SIZE], ndz_i[_ARRAY_SIZE];
+    uint norm2[_ARRAY_SIZE];                    zero(norm2);
+    uint arb2[_ARRAY_SIZE], arb1[_ARRAY_SIZE];  load(arb2, 2.0); load(arb1, 1.0);
+    uint temp[_ARRAY_SIZE];
   
     int iter        = 0;
     int last_period = 0;
     float mu        = 0.0;
+    float dist      = 0.0;
+    int dz_exp      = 0;
     // Calculate Escape Iteration
     for (iter; iter < MAX && norm2[1] < ESCAPE_VALUE; iter++)
     {
@@ -260,6 +277,28 @@ void main() {
             assign(p_r, z_r);
             assign(p_i, z_i);
             last_period = iter;
+        }
+
+        mul(z_r, dz_r, ndz_r);
+        mul(z_i, dz_i, temp);
+        negate(temp);
+        add(ndz_r, temp, ndz_r);
+        mul(ndz_r, arb2, ndz_r);
+        add(ndz_r, arb1, ndz_r);
+
+        mul(z_r, dz_i, ndz_i);
+        mul(z_i, dz_r, temp);
+        add(ndz_i, temp, ndz_i);
+        mul(ndz_i, arb2, ndz_i);
+
+        assign(dz_r, ndz_r);
+        assign(dz_i, ndz_i);
+
+        if (dz_r[1] > (1u << 29) ||
+            dz_i[1] > (1u << 29)) {
+            shr(dz_r, 16);
+            shr(dz_i, 16);
+            dz_exp += 16;
         }
         // zy = (zx + zx) * zy + cy;
         add(z_r, z_r, nz_i);
@@ -283,9 +322,15 @@ void main() {
 
         iter = eq2(z_r, p_r, z_i, p_i) ? MAX : iter;
     }
-    if (iter < MAX) {
-        mu = smooth_color ? iter + 1.0 - log(log(get_float(norm2)) * 0.5) / log(2) : iter;
-        mu = mu / float(MAX);
+    if (iter < MAX) { 
+    const float log_z = log(get_float(norm2)) * 0.5; 
+    mu = smooth_color ? iter + 1.0 - log(log_z) / log(2.0) : iter; mu = mu / float(MAX); 
+
+    const float f_dz_r = get_float(dz_r); const float f_dz_i = get_float(dz_i); 
+    const float a = max(abs(f_dz_r), abs(f_dz_i)); 
+    const float b = min(abs(f_dz_r), abs(f_dz_i)); 
+    const float log_dz = log(a) + 0.5 * log(1.0 + (b / a) * (b / a)) + dz_exp * log(2.0); 
+    dist = exp(log_z + log(log_z) - log_dz) * float(TEXTURE_SIZE.x) / get_float(zoom); 
     }
-    imageStore(_TEXTURE, G_ID, vec4(vec3(mu), 1.0));
+    imageStore(_TEXTURE, G_ID, vec4(mu, dist, 0.0, 1.0));
 }

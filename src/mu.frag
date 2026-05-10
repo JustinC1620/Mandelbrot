@@ -165,11 +165,16 @@ vec2 iter_to_oklch(in const mat3x4 power_mat)
     return vec2(L, C);
 }
 
-float read_mu(ivec2 p)
+vec2 read_mu_dist(ivec2 p)
 {
     ivec2 size = textureSize(mu_tex, 0);
     p = clamp(p, ivec2(0), size - 1);
-    return texelFetch(mu_tex, p, 0).r;
+    return texelFetch(mu_tex, p, 0).rg;
+}
+
+float read_mu(ivec2 p)
+{
+    return read_mu_dist(p).x;
 }
 
 vec3 shade(in const ivec2 p) {
@@ -259,8 +264,5 @@ void main()
     else
         color = shade(p);
 
-    frag_color = vec4(color, 1.0);
+    frag_color = vec4(color, read_mu_dist(p).y);
 }
-
-
-

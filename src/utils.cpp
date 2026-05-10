@@ -15,8 +15,8 @@ bool init(std::string name, GLFWwindow*& window)
 
     // Initialize OpenGL
     glfwInit();                                                            // Init GLFW
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);                         // Set OpenGL version to 3.x
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);                         // Set OpenGL version to 3.3
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);                         // Set OpenGL version to 4.x
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);                         // Set OpenGL version to 4.6
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);         // Set OpenGl profile to core
     glfwWindowHint(GLFW_SAMPLES, 4);
 
@@ -53,9 +53,11 @@ void resizeScreen(GLFWwindow* window, int new_width, int new_height)
     width = new_width;
     height = new_height;
     glBindTexture(GL_TEXTURE_2D, MAIN_TEX);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F,    width * _AA_SCALE, height * _AA_SCALE, 0, GL_RED,  GL_FLOAT, NULL);
     glBindTexture(GL_TEXTURE_2D, X_TEX);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, Y_TEX);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RGBA, GL_FLOAT, NULL);
 }
 
 // buildShader
@@ -94,10 +96,10 @@ void processInput(GLFWwindow* window, Real32& zoom, Real32& cntr_x, Real32& cntr
         cntr_x += _MOVE_SPEED * zoom * delta_time;
 
     if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-        zoom *= (1.0f + _OUT_SPEED * delta_time);
+        zoom *= (1.0 + _OUT_SPEED * delta_time);
 
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-        zoom *= (1.0f - _IN_SPEED * delta_time);
+        zoom *= (1.0 - _IN_SPEED * delta_time);
 
     static int prev_s   = GLFW_RELEASE;
     static int prev_p   = GLFW_RELEASE;

@@ -1,5 +1,10 @@
 #include <utils.h>
 
+extern "C" {
+    __declspec(dllexport) unsigned long NvOptimusEnablement = 1;
+    __declspec(dllexport) unsigned long AmdPowerXpressRequestHighPerformance = 1;
+}
+
 int main(void)
 {
     // GL Variable Declaration
@@ -9,12 +14,12 @@ int main(void)
     float last_fps_time = static_cast<float>(glfwGetTime());
     unsigned int vao = 0, vbo = 0;
     Real32 zoom(3), cntr_x(-0.5), cntr_y(0.0);
-    float delta_time  = 0.0;
-    int num_frames    = 0;
-    int render_mode   = 0;
+    float delta_time = 0.0;
+    int num_frames = 0;
+    int render_mode = 0;
     bool smooth_color = false;
-    bool precision    = false;
-    bool ok_lch       = false;
+    bool precision = false;
+    bool ok_lch = false;
 
     if (!init(_WINDOW_NAME, window)) { return -1; }
 
@@ -48,17 +53,17 @@ int main(void)
     glBindTexture(GL_TEXTURE_2D, MAIN_TEX);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RED, GL_FLOAT, NULL);
-    glBindImageTexture(0, MAIN_TEX, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32F);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RG, GL_FLOAT, NULL);
+    glBindImageTexture(0, MAIN_TEX, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RG32F);
 
     glGenTextures(1, &Y_TEX);
     glBindTexture(GL_TEXTURE_2D, Y_TEX);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RGBA, GL_FLOAT, NULL);
 
     glGenFramebuffers(1, &Y_FBO);
@@ -71,8 +76,7 @@ int main(void)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RGBA, GL_FLOAT, NULL);
 
     glGenFramebuffers(1, &X_FBO);
     glBindFramebuffer(GL_FRAMEBUFFER, X_FBO);
@@ -118,11 +122,13 @@ int main(void)
         renderTexture(vao, vbo);
         glMemoryBarrier(GL_FRAMEBUFFER_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
 
-        glViewport(0, 0, width * _AA_SCALE, height * _AA_SCALE);
         glBindFramebuffer(GL_FRAMEBUFFER, X_FBO);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         post_shdr.use();
         post_shdr.setInt("render_mode", render_mode);
+        post_shdr.setFloat("parallax_strength", 0.2);
+        post_shdr.setFloat("parallax_scale", 0.1);
+        post_shdr.setFloat("zoom", zoom.getFloat());
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, Y_TEX);
         post_shdr.setInt("color_tex", 0);
@@ -133,6 +139,7 @@ int main(void)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         on_shdr.use();
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, X_TEX);
         renderTexture(vao, vbo);
 
