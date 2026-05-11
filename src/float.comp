@@ -2,7 +2,7 @@
 
 layout (local_size_x = 16, local_size_y = 16, local_size_Z = 1) in;
 
-layout(rg32f, binding = 0) writeonly uniform image2D _TEXTURE;
+layout(rgba32f, binding = 0) writeonly uniform image2D _TEXTURE;
 
 uniform float cntr_x;
 uniform float cntr_y;

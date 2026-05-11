@@ -55,8 +55,8 @@ int main(void)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RG, GL_FLOAT, NULL);
-    glBindImageTexture(0, MAIN_TEX, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RG32F);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width * _AA_SCALE, height * _AA_SCALE, 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindImageTexture(0, MAIN_TEX, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
 
     glGenTextures(1, &Y_TEX);
     glBindTexture(GL_TEXTURE_2D, Y_TEX);

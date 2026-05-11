@@ -177,37 +177,6 @@ float read_mu(ivec2 p)
     return read_mu_dist(p).x;
 }
 
-vec3 shade(in const ivec2 p) {
-    const float mu = read_mu(p);
-    if (mu == 0) {return vec3(0.0);}
-
-    const float shift = 15.0;
-
-    const float l_shift = ok_lch ? shift * 0.01             : shift;
-    const float c_shift = ok_lch ? shift * 0.00255172413793 : shift;
-    const float eased_iter = sqrt(mu);
-
-    //const float H = mod(mod(360 * eased_iter, 360) + 10 * time, 360);  // Time Shifting Color
-    const float H = mod(360 * 2 * eased_iter, 360);
-    const float h_norm = (H - 180) / 127.456120241149;
-    mat3x4 power_mat = mat3x4(0.0);
-    power_mat[2] = powers(h_norm, h_norm);
-    power_mat[1] = powers(power_mat[2].x * h_norm, h_norm);
-    power_mat[0] = powers(power_mat[1].x * h_norm, h_norm);
-
-    vec2 LC = ok_lch ? iter_to_oklch(power_mat) : iter_to_lch(power_mat);
-
-    LC.x = modulate_value(mu, LC.x - l_shift, l_shift, shift, 0.0);
-    LC.y = modulate_value(mu, LC.y - c_shift, c_shift, shift, 0.0);
-
-    if (ok_lch) {
-        return oklch_to_rgb(vec3(LC, H));
-    }
-    else {
-        return lch_to_rgb(vec3(LC, H));
-    }
-}
-
 float laplace_mu(in const ivec2 p)
 {
     float d = 0.0;
@@ -229,7 +198,7 @@ float laplace_mu(in const ivec2 p)
     return abs(d);
 }
 
-float sobel_mu(in const ivec2 p)
+vec2 sobel_mu(in const ivec2 p)
 {
     float gx = 0.0;
     float gy = 0.0;
@@ -248,7 +217,43 @@ float sobel_mu(in const ivec2 p)
     gy +=  2.0 * read_mu(p + ivec2( 0, -1));
     gy +=  1.0 * read_mu(p + ivec2( 1, -1));
 
-    return length(vec2(gx, gy));
+    return vec2(gx, gy);
+}
+
+vec3 shade(in const ivec2 p) {
+    const float mu = read_mu(p);
+    const int num_rays = 31;
+    if (mu == 0) {return vec3(0.0);}
+
+    const float shift = 15.0;
+    const float l_shift = ok_lch ? shift * 0.01             : shift;
+    const float c_shift = ok_lch ? shift * 0.00255172413793 : shift;
+    const float eased_iter = sqrt(mu);
+
+    const vec2 grad = sobel_mu(p);
+    const float field_angle = atan(grad.x, -grad.y); // 90 degree rotation
+    const float field_norm = (field_angle / (2.0 * 3.14159265)) + 0.5; // 0..1
+    
+    const float H = mod(360.0 * 2.0 * eased_iter, 360.0);
+    const float h_norm = (H - 180) / 127.456120241149;
+    mat3x4 power_mat = mat3x4(0.0);
+    power_mat[2] = powers(h_norm, h_norm);
+    power_mat[1] = powers(power_mat[2].x * h_norm, h_norm);
+    power_mat[0] = powers(power_mat[1].x * h_norm, h_norm);
+
+    vec2 LC = ok_lch ? iter_to_oklch(power_mat) : iter_to_lch(power_mat);
+
+    LC.x = modulate_value(mu, LC.x - l_shift, l_shift, shift, 0.0);
+    LC.y = modulate_value(mu, LC.y - c_shift, c_shift, shift, 0.0);
+    float ray_signal = abs(sin(field_norm * 3.14159265 * num_rays));
+    LC.x *= mix(0.3, 1.0, ray_signal);
+
+    if (ok_lch) {
+        return oklch_to_rgb(vec3(LC, H));
+    }
+    else {
+        return lch_to_rgb(vec3(LC, H));
+    }
 }
 
 void main()
@@ -258,7 +263,7 @@ void main()
     vec3 color;
 
     if (render_mode == 1)
-        color = vec3(sobel_mu(p));
+        color = vec3(length(sobel_mu(p)));
     else if (render_mode == 2)
         color = vec3(1 - exp(-pow(laplace_mu(p) / k, 2)));
     else

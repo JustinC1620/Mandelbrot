@@ -3,7 +3,7 @@
 
 layout (local_size_x = 16, local_size_y = 16, local_size_Z = 1) in;
 
-layout(r32f, binding = 0) writeonly uniform image2D _TEXTURE;
+layout(rgba32f, binding = 0) writeonly uniform image2D _TEXTURE;
 
 const int  _PRECISION  = 3;
 const int  _ARRAY_SIZE = _PRECISION + 1;
